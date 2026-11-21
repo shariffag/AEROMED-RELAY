@@ -9,5 +9,5 @@ RECM does not decide fitness to fly and does not replace the authorised KCAA sub
 
 - `AeroMed-Relay-Demo.html`: the interactive demo (one file, works offline)
 - `AeroMed-Relay-Demo-Video.mp4`: recorded walk-through (3 min 55 s, computer-generated voice)
-- `documents/`: user guide and demo check report (PDF)
+- `documents/`: user guide, demo check report, go-live plan and QR landing page (PDF)
 - `index.html`: landing page
