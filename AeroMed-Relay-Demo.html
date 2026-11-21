@@ -429,7 +429,8 @@ const IC = {
   shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5M5 20h14"/>',
   play: '<path d="M7 4l13 8-13 8z"/>',
-  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>'
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
+  duty: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V4.5h6V7M3 12.5h18"/>'
 };
 const ico = n => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${IC[n]}</svg>`;
 
@@ -608,9 +609,9 @@ function rulesHtml(c) {
 // ---------- render ----------
 const TABS = { ame: [["project", "Project"], ["cases", "Cases"], ["pilots", "Pilots"], ["dash", "Dashboard"], ["measures", "Measures"], ["audit", "Audit log"]],
   coord: [["project", "Project"], ["cases", "Cases"], ["pilots", "Pilots"], ["dash", "Dashboard"], ["measures", "Measures"], ["audit", "Audit log"]],
-  app: [["project", "Project"], ["cases", "My requests"], ["profile", "My profile"]] };
+  app: [["project", "Project"], ["cases", "My requests"], ["profile", "My profile"], ["duty", "Next duty"]] };
 const SECTAB = { audit: 0, measures: 1, project: 2 };
-const TABICON = { project: "project", cases: "cases", pilots: "user", profile: "user", dash: "dash", measures: "measures", audit: "audit" };
+const TABICON = { project: "project", cases: "cases", pilots: "user", profile: "user", dash: "dash", measures: "measures", audit: "audit", duty: "duty" };
 function render() {
   document.querySelectorAll(".roles button").forEach(b => b.setAttribute("aria-pressed", b.dataset.role === ui.role));
   const p = PEOPLE[ui.role];
@@ -627,6 +628,7 @@ function render() {
   else if (ui.tab === "cases") m.innerHTML = viewCases();
   else if (ui.tab === "pilots") m.innerHTML = viewPilots();
   else if (ui.tab === "profile") m.innerHTML = `<div class="ph"><div><h1>My profile</h1><p>The details RECM holds about you, your requests and who has worked on your record.</p></div></div><section class="card" id="profile">${profile(ME_APP, true)}</section>`;
+  else if (ui.tab === "duty") m.innerHTML = viewDuty();
   else if (ui.tab === "dash") m.innerHTML = viewDash();
   else if (ui.tab === "measures") m.innerHTML = viewMeasures();
   else m.innerHTML = viewAudit();
@@ -682,6 +684,7 @@ function viewProject() {
     <section class="card feat"><div class="badge">${ico("dash")}</div><h3>Completeness dashboard</h3><p>Requested, received, incomplete and awaiting-review items, with owner and due date.</p></section>
   </div>
   <p class="muted" id="alsoShown">Also in this prototype: a <b>Medical Evidence Journey</b> on every case (stage, time per stage, who acts next, what is outstanding) and <b>reminder and escalation rules</b>. The rules are simulated: no SMS or email is sent.</p>
+  <p class="muted" id="alsoDuty">Outside RECM: the applicant role also shows <b>Prepare for my next duty</b>, a later-phase concept for a voluntary wellbeing module (food, drink and a readiness checklist). It is kept apart from RECM: nothing on it reaches the AME, the clinic, KCAA or the airline.</p>
   <div class="two">
     <section class="card never"><h2>RECM never does this</h2><ul>
       <li>${ico("ban")}<span>Decide fitness to fly or issue, refuse or suspend a certificate.</span></li>
@@ -767,6 +770,72 @@ function openPilot(id) {
   if (ui.role === "app") { ui.tab = "profile"; render(); window.scrollTo(0, 0); return; }
   ui.tab = "pilots"; ui.pilot = id; tick(1); log(`Opened pilot profile ${APPLICANTS[id][1]}`, "", id); render();
   if (window.matchMedia("(max-width:1279px)").matches) { const d = $("#profile"); if (d) d.scrollIntoView({ block: "start" }); }
+}
+
+// ---------- Later-phase concept: Pilot Health & Personalised Preparation (report Appendix K) ----------
+// Kept apart from RECM on purpose: own state (DUTY, not S), applicant only, never written to the RECM audit log.
+// General preparation text only (no medical or dietetic advice); a dietitian would review it before any real use.
+const dutySeed = () => ({ consent: false, diet: "nopork", allergy: "peanuts", goal: "steady", trip: "lh", done: {} });
+let DUTY = dutySeed();
+const DIET = { none: ["No preference", ""], nopork: ["No pork", "without pork"], veg: ["Vegetarian", "vegetarian"], halal: ["Halal", "halal"] };
+const ALLERGY = { none: ["None", ""], peanuts: ["Peanuts", "peanuts"], treenuts: ["Tree nuts", "tree nuts"], shellfish: ["Shellfish", "shellfish"] };
+const GOAL = { none: ["No goal", ""], steady: ["Steady energy on night duties", ""], rest: ["Rest well on the layover", ""] };
+const TRIPS = {
+  lh: { name: "Night long-haul: Nairobi to London, 48-hour layover",
+    facts: [["Route", "Nairobi (NBO) to London Heathrow (LHR)"], ["Report", "22:00 Nairobi time"], ["Departure", "23:30 Nairobi time"], ["In the air", "About 8 h 50 min"],
+      ["Arrival", "05:20 London time"], ["Time zones", "London is 3 hours behind Nairobi"], ["Layover", "48 hours"], ["Food available", "Crew meals on board; hotel breakfast from 06:30, little food after 22:00"]] },
+  sh: { name: "Day short-haul: Nairobi to Mombasa and back",
+    facts: [["Route", "Nairobi (NBO) to Mombasa (MBA) and back"], ["Report", "06:00 Nairobi time"], ["In the air", "About 1 h each way"], ["Turnaround", "1 hour at Mombasa"],
+      ["Time zones", "No change"], ["Layover", "None"], ["Food available", "Snacks on board; kiosk at Mombasa"]] }
+};
+function dutyPlan() {
+  const d = DUTY, p = d.consent, diet = p ? DIET[d.diet][1] : "", alg = p ? ALLERGY[d.allergy][1] : "", goal = p ? d.goal : "none";
+  const snack = "Pack two snacks you know well" + (alg ? `, with no ${alg}; check the labels` : "") + ".";
+  const rows = d.trip === "lh" ? [
+    ["before", "Before the duty", "Have a main meal at home at a usual meal time before leaving for the airport. " + snack],
+    ["board", "On board", (diet ? `Ask for a crew meal ${diet} through the usual crew channel. ` : "Eat the crew meal at a time that suits your planned rest. ") + (alg ? `Food on board may contain ${alg}: check before eating. ` : "") + "Drink water regularly; carry a refillable bottle."],
+    ["last", "Last hours of the flight", "Choose lighter food. If you plan to sleep after landing, choose drinks without caffeine." + (goal === "steady" ? " For steady energy, choose a small snack rather than a large meal." : "")],
+    ["layover", "Layover", (goal === "rest" ? "Keep the first meal after landing light. " : "") + "Eat at London meal times. The hotel serves little food after 22:00, so plan the evening meal before then."]
+  ] : [
+    ["before", "Before the duty", "Have breakfast before reporting at 06:00, even a small one. " + snack],
+    ["turn", "Turnaround", "Have your packed snack and refill your water bottle during the turnaround." + (diet ? ` If you buy food at the airport, check that it is ${diet}.` : "")],
+    ["back", "Back at base", "Eat your next meal at a usual time. There is no time zone change on this duty."]
+  ];
+  const chk = [["snack", "Snacks packed" + (alg ? " and labels checked" : "")], ["water", "Water bottle packed"]];
+  if (d.trip === "lh" && diet) chk.push(["meal", "Meal request made through the usual crew channel"]);
+  if (d.trip === "lh") chk.push(["layover", "Layover meal times noted"]);
+  chk.push(["rest", "Rest planned under the operator's fatigue rules"], ["info", "I understand this is general information, not medical advice"]);
+  return { rows, chk };
+}
+function viewDuty() {
+  const d = DUTY, { rows, chk } = dutyPlan(), ready = chk.filter(c => d.done[c[0]]).length, t = TRIPS[d.trip];
+  const opt = (map, v) => Object.entries(map).map(([k, x]) => `<option value="${k}" ${v === k ? "selected" : ""}>${x[0]}</option>`).join("");
+  return `<div class="ph"><div><h1>Prepare for my next duty</h1><p>A plan for food, drink and a readiness checklist for your next duty.</p></div></div>
+  ${note("warn", "<b>Later-phase concept, not part of RECM.</b> Nothing on this page is shared with your AME, the clinic, KCAA or your airline, and it is never used for fitness-to-fly decisions. It is not written to the RECM audit log. General information only, not medical or dietary advice.", "dSep")}
+  <div class="grid2 mt">
+    <section class="card" id="dPrefs" aria-labelledby="dPrefsH"><h2 id="dPrefsH">Your preferences (optional)</h2>
+      <label class="chk"><input type="checkbox" id="dConsent" ${d.consent ? "checked" : ""}>Use my preferences to personalise suggestions. I can withdraw this at any time.</label>
+      <div><label for="dDiet">Food preference</label><select id="dDiet">${opt(DIET, d.diet)}</select></div>
+      <div><label for="dAllergy">Allergy</label><select id="dAllergy">${opt(ALLERGY, d.allergy)}</select></div>
+      <div><label for="dGoal">Goal</label><select id="dGoal">${opt(GOAL, d.goal)}</select></div>
+      <div class="acts"><button class="quiet" data-act="dDel" id="dDel">${ico("ban")}Delete my preferences</button></div>
+    </section>
+    <section class="card" id="dDuty" aria-labelledby="dDutyH"><h2 id="dDutyH">Your next duty</h2>
+      <div><label for="dTrip">Duty (simulated)</label><select id="dTrip">${Object.entries(TRIPS).map(([k, x]) => `<option value="${k}" ${d.trip === k ? "selected" : ""}>${x.name}</option>`).join("")}</select></div>
+      <div class="meta" id="dFacts">${t.facts.map(([k, v]) => `<div><b>${k}</b>${v}</div>`).join("")}</div>
+    </section>
+  </div>
+  <section class="card mt" id="dPlan" aria-labelledby="dPlanH"><h2 id="dPlanH">Your preparation plan</h2>
+    <p class="muted" id="dMode">${d.consent ? `Personalised with: ${[DIET[d.diet][0].toLowerCase(), d.allergy !== "none" ? ALLERGY[d.allergy][0].toLowerCase() + " allergy" : "", d.goal !== "none" ? "goal: " + GOAL[d.goal][0].toLowerCase() : ""].filter(Boolean).join(", ")}.` : "General suggestions. Tick “Use my preferences” to personalise them."}</p>
+    <div class="tw"><table id="dTable" class="stack"><thead><tr><th>When</th><th>Suggestion</th></tr></thead><tbody>
+    ${rows.map(r => `<tr data-when="${r[0]}">${td("When", esc(r[1]), "ttl")}${td("Suggestion", esc(r[2]))}</tr>`).join("")}
+    </tbody></table></div>
+  </section>
+  <section class="card mt" id="dCheck" aria-labelledby="dCheckH"><h2 id="dCheckH">Readiness checklist</h2>
+    <p id="dReady"><b>${ready} of ${chk.length}</b> ready</p>
+    ${chk.map(c => `<label class="chk"><input type="checkbox" id="dc-${c[0]}" data-chk="${c[0]}" ${d.done[c[0]] ? "checked" : ""}>${esc(c[1])}</label>`).join("")}
+    <p class="muted mt">This module does not contact catering, the airline or the clinic. Simulated duty and simulated data.</p>
+  </section>`;
 }
 
 function detail(c) {
@@ -1006,6 +1075,7 @@ document.addEventListener("click", e => {
   else if (act === "qret") { const q = S.quarantine.splice(+a.dataset.k, 1)[0]; tick(1); log("Quarantined file returned to applicant, not attached", q.caseId); toast("File returned to the applicant. It was not attached to any case."); render(); }
   else if (act === "goto") { e.preventDefault(); ui.tab = "cases"; ui.showClosed = !!byId(a.dataset.id).closedAt; pick(a.dataset.id); }
   else if (act === "openPilot" || act === "pickPilot") { e.preventDefault(); openPilot(a.dataset.pid); }
+  else if (act === "dDel") { DUTY = { ...dutySeed(), consent: false, diet: "none", allergy: "none", goal: "none", trip: DUTY.trip }; render(); toast("Your preferences were deleted from this module."); }
   else if (act === "wt") goWt(0);
   else if (act === "dfilter") { ui.dfilter = a.dataset.f && ui.dfilter !== a.dataset.f ? a.dataset.f : null; render(); if (ui.dfilter) { const o = $("#outCard"); if (o && o.getBoundingClientRect().top > innerHeight - 120) o.scrollIntoView({ block: "start" }); } }
 });
@@ -1014,8 +1084,14 @@ document.addEventListener("keydown", e => {
 });
 document.addEventListener("change", e => {
   if (e.target.id === "showClosed") { ui.showClosed = e.target.checked; render(); }
+  // Next duty module: update its own state, re-render, keep keyboard focus on the same control
+  const dk = { dConsent: "consent", dDiet: "diet", dAllergy: "allergy", dGoal: "goal", dTrip: "trip" }[e.target.id];
+  if (dk || e.target.dataset.chk) {
+    if (dk) DUTY[dk] = e.target.type === "checkbox" ? e.target.checked : e.target.value; else DUTY.done[e.target.dataset.chk] = e.target.checked;
+    const id = e.target.id; render(); const el = document.getElementById(id); if (el) el.focus();
+  }
 });
-$("#resetBtn").addEventListener("click", () => { S = seed(); Object.assign(ui, { tab: "project", sel: null, showClosed: false, msg: null, busy: false, formErr: [], wt: -1, up: null, confirmDel: null, pilot: null, dfilter: null }); render(); toast("Demo reset. All data are simulated."); });
+$("#resetBtn").addEventListener("click", () => { S = seed(); DUTY = dutySeed(); Object.assign(ui, { tab: "project", sel: null, showClosed: false, msg: null, busy: false, formErr: [], wt: -1, up: null, confirmDel: null, pilot: null, dfilter: null }); render(); toast("Demo reset. All data are simulated."); });
 
 // ---------- guided walkthrough ----------
 const WT = [
